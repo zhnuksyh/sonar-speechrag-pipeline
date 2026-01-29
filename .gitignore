@@ -11,3 +11,6 @@ venv/
 server.log
 .vscode/
 .idea/
+
+# Internal docs (not for public repo)
+docs/INTERNAL_roadmap.md
