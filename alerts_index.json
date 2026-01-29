@@ -1,0 +1,22 @@
+{
+    "alerts": [
+        {
+            "id": "JHR-001",
+            "location": "Taman Molek, JB",
+            "status": "Pipe Burst Repair",
+            "eta": "08:00 PM Today"
+        },
+        {
+            "id": "JHR-002",
+            "location": "Skudai (Jalan Utama)",
+            "status": "Scheduled Maintenance",
+            "eta": "Completed"
+        },
+        {
+            "id": "JHR-003",
+            "location": "Senai Airport Area",
+            "status": "Pressure Adjustment",
+            "eta": "10:00 AM Tomorrow"
+        }
+    ]
+}
