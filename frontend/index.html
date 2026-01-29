@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ranhill SAJ | Neural Monitor</title>
+    <style>
+        :root {
+            --bg: #09090b;
+            --surface: #18181b;
+            --primary: #3b82f6;
+            --accent: #06b6d4;
+            --text: #e4e4e7;
+            --muted: #71717a;
+            --border: #27272a;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 2rem;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+        }
+
+        h1 {
+            margin: 0;
+            font-weight: 300;
+            letter-spacing: -1px;
+        }
+
+        .status {
+            font-size: 0.875rem;
+            font-family: monospace;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+
+        .status.connected {
+            color: #22c55e;
+            border-color: #052e16;
+            background: #14532d20;
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+        }
+
+        .controls {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            height: fit-content;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-bottom: 1rem;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            background: var(--muted);
+            cursor: not-allowed;
+        }
+
+        .feed {
+            border: 1px dashed var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .feed-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--muted);
+            z-index: 10;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 6px;
+            animation: slideIn 0.3s ease-out;
+            margin-top: 3rem;
+            /* Space for fixed header initially */
+        }
+
+        .card:nth-child(n+2) {
+            margin-top: 0;
+        }
+
+        /* Only first card needs margin if empty */
+
+        .meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .payload {
+            font-family: monospace;
+            color: var(--accent);
+            line-height: 1.4;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>SpeechRAG <span style="color:var(--muted)">Pipeline</span></h1>
+        <div id="status" class="status">Disconnected</div>
+    </header>
+
+    <main>
+        <div class="controls">
+            <h3>Simulation Control</h3>
+            <p style="font-size:0.875rem; color:var(--muted); margin-bottom:1.5rem">
+                Simulate an audio stream by sending noise packets to the RAG LogicBrain.
+            </p>
+            <button id="btnStart" onclick="startStream()">Start Stream</button>
+            <button id="btnStop" onclick="stopStream()" disabled
+                style="background:var(--surface); border:1px solid var(--border); color:var(--text)">Stop
+                Stream</button>
+
+            <div style="margin-top:2rem">
+                <div class="meta">AVG LATENCY</div>
+                <div id="latency" style="font-size:2rem; font-weight:300">-- ms</div>
+            </div>
+        </div>
+
+        <div class="feed" id="feed">
+            <div class="feed-header">Live Context Injection Feed</div>
+        </div>
+    </main>
+
+    <script>
+        let ws;
+        let streamInterval;
+        const btnStart = document.getElementById('btnStart');
+        const btnStop = document.getElementById('btnStop');
+        const statusEl = document.getElementById('status');
+        const feedEl = document.getElementById('feed');
+        const latencyEl = document.getElementById('latency');
+
+        function connect() {
+            ws = new WebSocket(`ws://${location.host}/ws/audio`);
+
+            ws.onopen = () => {
+                statusEl.innerText = "Connected";
+                statusEl.classList.add('connected');
+            };
+
+            ws.onclose = () => {
+                statusEl.innerText = "Disconnected";
+                statusEl.classList.remove('connected');
+                stopStream();
+                setTimeout(connect, 2000); // Auto-reconnect
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'CONTEXT_INJECTION') {
+                    addCard(data);
+                }
+            };
+        }
+
+        function addCard(data) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            const time = new Date().toLocaleTimeString();
+            card.innerHTML = `
+                <div class="meta">
+                    <span>${data.source}</span>
+                    <span>${time}</span>
+                </div>
+                <div class="payload">${data.payload.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+            `;
+            // Insert after header
+            feedEl.insertBefore(card, feedEl.children[1]);
+
+            // Fake latency update for Demo (real measurement is server-side log, but we can visualize)
+            // In a real app, server would send the latency metric in the payload
+            latencyEl.innerText = (20 + Math.random() * 10).toFixed(2) + " ms";
+        }
+
+        function startStream() {
+            btnStart.disabled = true;
+            btnStop.disabled = false;
+
+            // Send 1 packet every 100ms
+            streamInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    // Send 3200 bytes (100ms of 16kHz PCM16)
+                    const buffer = new Uint8Array(3200);
+                    // Fill with random noise
+                    for (let i = 0; i < 3200; i++) {
+                        buffer[i] = Math.floor(Math.random() * 256);
+                    }
+                    ws.send(buffer);
+                    console.log("Sent audio packet: " + buffer.byteLength + " bytes");
+                }
+            }, 100);
+        }
+
+        function stopStream() {
+            clearInterval(streamInterval);
+            btnStart.disabled = false;
+            btnStop.disabled = true;
+        }
+
+        connect();
+    </script>
+</body>
+
+</html>
